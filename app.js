@@ -4,8 +4,19 @@ const express = require('express')
 const mongoose = require('mongoose')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
+const cors = require('cors')
+const cookieParser = require('cookie-parser')
 
 const app = express()
+app.use(cookieParser)
+app.use(
+    cors({
+        origin: 'http://localhost:3000',
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    })
+)
+
 
 // Public Route
 app.get('/',(req, res) => {
@@ -14,6 +25,7 @@ app.get('/',(req, res) => {
 
 // Config Json
 app.use(express.json())
+app.use(express.urlencoded({extended: true}))
 
 // Models 
 const User = require('./models/User')
@@ -103,9 +115,17 @@ app.post('/auth/login', async(req, res) => {
         const secret = process.env.SECRET
         const token = jwt.sign({
             id: user._id,
+            name: user.name,
+            email: user.email
         }, secret)
 
-        res.status(200).json({msg: "Autenticação realizada com sucesso!",token})
+        res.cookie('token', token, {
+            httpOnly: true,
+            maxAge: 24 * 60 * 60 * 1000 // 1 dia
+        })
+
+        res.status(200).json({msg: "Login efetuado com sucesso!"})
+
 
     } catch (error) {
         console.log(error)
