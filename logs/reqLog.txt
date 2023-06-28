@@ -1,0 +1,5 @@
+20230628	10:39:44	19dbd654-b614-4b70-943c-13ac0fb0d905	POST	undefined	/register
+20230628	10:40:03	b6ed8e96-ee79-4bcd-8313-acb0fdd3e7ba	POST	undefined	/register
+20230628	10:41:36	e3a264b1-a115-4419-b3db-7ea1c33f1112	GET	undefined	/auth/getUsers
+20230628	10:41:44	1786d402-45a3-4126-9ac8-159a0f09c1c5	GET	undefined	/getUsers
+20230628	11:25:45	d32e10b8-312f-458a-8272-693dad9af728	POST	undefined	/register

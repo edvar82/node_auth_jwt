@@ -1,189 +1,73 @@
-/*imports*/ 
-require ('dotenv').config()
-const express = require('express')
-const mongoose = require('mongoose')
-const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken')
-const cors = require('cors')
-const cookieParser = require('cookie-parser')
+require("dotenv").config();
+const express = require("express");
+const app = express();
+const path = require("path");
+const cors = require("cors");
+const corsOptions = require("./config/corsOptions");
+const { logger } = require("./middleware/logEvents");
+const errorHandler = require("./middleware/errorHandler");
+const verifyJWT = require("./middleware/verifyJWT");
+const cookieParser = require("cookie-parser");
+const credentials = require("./middleware/credentials");
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
-const app = express()
-app.use(cookieParser)
-app.use(
-    cors({
-        origin: 'http://localhost:3000',
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    })
-)
+const dbUser = process.env.DB_USER;
+const dbPassword = process.env.DB_PASS;
 
+// custom middleware logger
+app.use(logger);
 
-// Public Route
-app.get('/',(req, res) => {
-    res.status(200).json({msg:'Bem vindo!'});
+// Handle options credentials check - before CORS!
+// and fetch cookies credentials requirement
+app.use(credentials);
+
+// Cross Origin Resource Sharing
+app.use(cors(corsOptions));
+
+// built-in middleware to handle urlencoded form data
+app.use(express.urlencoded({ extended: false }));
+
+// built-in middleware for json
+app.use(express.json());
+
+//middleware for cookies
+app.use(cookieParser());
+
+//serve static files
+app.use("/", express.static(path.join(__dirname, "/public")));
+
+// routes
+app.use("/", require("./routes/root"));
+app.use("/register", require("./routes/register"));
+app.use("/auth", require("./routes/auth"));
+app.use("/refresh", require("./routes/refresh"));
+app.use("/logout", require("./routes/logout"));
+
+app.use(verifyJWT);
+app.use("/employees", require("./routes/api/employees"));
+app.use("/users", require("./routes/api/users"));
+
+app.all("*", (req, res) => {
+  res.status(404);
+  if (req.accepts("html")) {
+    res.sendFile(path.join(__dirname, "views", "404.html"));
+  } else if (req.accepts("json")) {
+    res.json({ error: "404 Not Found" });
+  } else {
+    res.type("txt").send("404 Not Found");
+  }
 });
 
-// Config Json
-app.use(express.json())
-app.use(express.urlencoded({extended: true}))
-
-// Models 
-const User = require('./models/User')
-
-// Registrar usuario
-app.post('/auth/register', async(req,res) => {
-
-    const { name, email, password, confirmpassword } = req.body
-
-    //validations
-    if(!name){
-        return res.status(422).json({msg: 'O nome é obrigatório'})
-    }
-
-    if(!email){
-        return res.status(422).json({msg: 'O email é obrigatório'})
-    }
-
-    if(!password){
-        return res.status(422).json({msg: 'A senha é obrigatório'})
-    }
-
-    if(password != confirmpassword){
-        return res.status(422).json({msg: 'As senhas não conferem'})
-    }
-
-    // check se ja existe o usuario
-    const userExists = await User.findOne({email: email})
-
-    if(userExists){
-        return res.status(422).json({msg: 'Por favor, utilize outro e-mail.'})
-    }
-
-    
-
-    // create password
-    const salt = await bcrypt.genSalt(12)
-    const passwordHash = await bcrypt.hash(password, salt)
-
-    // create user
-    const user = new User({
-        name, 
-        email, 
-        password: passwordHash,
-    })
-
-    try {
-        await user.save()
-        res.status(201).json({msg: "Usuário cadastrado com sucesso"})
-        
-    } catch (error) {
-        console.log(error)
-        res.status(500).json({msg: "Aconteceu um erro no servidor"})
-    }
-
-
-})
-
-app.post('/auth/login', async(req, res) => {
-
-    const {email, password} = req.body
-
-    if(!email){
-        return res.status(422).json({msg: "O email é obrigatório!"})
-    }
-
-    if(!password){
-        return res.status(422).json({msg: "A senha é obrigatória!"})
-    }
-
-    // check se o email existe
-    const user = await User.findOne({email: email})
-
-    if(!user){
-        return res.status(404).json({msg: "Usuário não encontrado!"})
-    }
-
-    // check se a senha é igual
-    const checkPassword = await bcrypt.compare(password, user.password)
-
-    if(!checkPassword){
-        return res.status(422).json({msg: "Senha inválida!"})
-    }   
-
-    try {
-        
-        const secret = process.env.SECRET
-        const token = jwt.sign({
-            id: user._id,
-            name: user.name,
-            email: user.email
-        }, secret)
-
-        res.cookie('token', token, {
-            httpOnly: true,
-            maxAge: 24 * 60 * 60 * 1000 // 1 dia
-        })
-
-        res.status(200).json({msg: "Login efetuado com sucesso!"})
-
-
-    } catch (error) {
-        console.log(error)
-        res.status(500).json({msg: "Aconteceu um erro no servidor"})
-    }
-
-});
-
-app.post('/user/:id', checkToken, async(req, res) =>{
-
-    const id = req.params.id
-
-    //check se o id existe
-    const user = await User.findById(id, '-password')
-
-    if(!user){
-        res.status(404).json({msg:"Usuário não encontrado!"})
-    }
-
-    res.status(200).json({msg:user})
-
-})
-
-// Middleware para acessar a rota privada
-function checkToken(req, res, next){
-
-    const authHeader = req.headers['authorization']
-    const token = authHeader && authHeader.split(' ')[1] //Pois o authHeader é (Bearer TOKEN)
-
-    if(!token){
-        return res.status(401).json({msg:"Acesso negado"})
-    }
-
-    try {
-    
-        const secret = process.env.SECRET
-
-        jwt.verify(token, secret)
-        next()
-
-    } catch (error) {
-        res.status(400).json({msg: "Token Inválido"})
-        
-    }
-
-}
-
-// Credenciais
-const dbUser = process.env.DB_USER
-const dbPassword = process.env.DB_PASS
-
+app.use(errorHandler);
 
 mongoose
-.connect(
+  .connect(
     `mongodb+srv://${dbUser}:${dbPassword}@cluster0.gzmuytc.mongodb.net/?retryWrites=true&w=majority`
-    )
-.then(() => {
-    console.log('Conectou ao banco!')
-    app.listen(3000)
-})
-.catch((err) => console.log(err))
+  )
+  .then(() => {
+    console.log("Conectou ao banco!");
+    app.listen(3500);
+  })
+  .catch((err) => console.log(err));
