@@ -28,7 +28,7 @@ const createNewEmployee = async (req, res) => {
 
 const updateEmployee = async (req, res) => {
   if (!req?.body?.id) {
-    return res.status(400).json({ message: "ID parameter is required." });
+    return res.status(400).json({ message: "Parâmetro ID é obrigatório." });
   }
 
   const employee = await Employee.findOne({ _id: req.body.id }).exec();
